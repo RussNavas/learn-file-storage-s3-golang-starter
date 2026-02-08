@@ -1,12 +1,12 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
-	//"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
 	"github.com/google/uuid"
 )
 
@@ -44,7 +44,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	defer file.Close()
 
 	mediaType := header.Header.Get("Content-Type");
-	imgs, err := io.ReadAll(file);
+	img, err := io.ReadAll(file);
 	if err != nil{
 		respondWithError(w, http.StatusInternalServerError, "Unable to read image daata", err)
 		return
@@ -61,21 +61,16 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	newThumbnail := thumbnail{
-		data: imgs,
-		mediaType: mediaType,
-	}
 
-	videoThumbnails[videoID] = newThumbnail;
-
-	formattedURL := fmt.Sprintf("http://localhost:%s/api/thumbnails/%s", cfg.port, videoID);
-	vid.ThumbnailURL = &formattedURL
+	imgToStr := base64.StdEncoding.EncodeToString(img);
+	dataURL := fmt.Sprintf("data:%s;base64,%s", mediaType, imgToStr);
+	vid.ThumbnailURL = &dataURL;
 	err = cfg.db.UpdateVideo(vid);
 	if err != nil{
-		delete(videoThumbnails, videoID)
 		respondWithError(w, http.StatusInternalServerError, "unable to update video", err)
 		return
 	}
 
+	
 	respondWithJSON(w, http.StatusOK, vid);
 }
