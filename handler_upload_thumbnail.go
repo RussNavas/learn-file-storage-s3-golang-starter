@@ -1,10 +1,13 @@
 package main
 
 import (
-	"encoding/base64"
+
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path"
+	"strings"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -44,33 +47,47 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	defer file.Close()
 
 	mediaType := header.Header.Get("Content-Type");
-	img, err := io.ReadAll(file);
-	if err != nil{
-		respondWithError(w, http.StatusInternalServerError, "Unable to read image daata", err)
+	if mediaType == ""{
+		respondWithError(w, http.StatusBadRequest, "Missing Content-Type for thumbnail", nil)
 		return
 	}
 
-	vid, err := cfg.db.GetVideo(videoID);
-	if err != nil{
-		respondWithError(w, http.StatusNotFound, "Video not found in db", err)
+	assetPath := getAssetPath(videoID, mediaType)
+	assetDiskPath := cfg.getAssetDiskPath(assetPath)
+
+	dst, err := os.Create(assetDiskPath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to create file on server", err)
+		return
+	}
+	defer dst.Close()
+	if _, err = io.Copy(dst, file); err != nil{
+		respondWithError(w, http.StatusInternalServerError, "Error saving file", err)
 		return
 	}
 
-	if vid.UserID != userID{
-		respondWithError(w, http.StatusUnauthorized, "User is not the video owner", err)
+	video, err := cfg.db.GetVideo(videoID)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error saving file", err)
+		return
+	}
+	if video.UserID != userID {
+		respondWithError(w, http.StatusUnauthorized, "Not authorized to update this video", nil)
+		return
+	}
+	if video.UserID != userID {
+		respondWithError(w, http.StatusUnauthorized, "Not authorized to update this video", nil)
 		return
 	}
 
+	url := cfg.getAssetURL(assetPath)
+	video.ThumbnailURL = &url
 
-	imgToStr := base64.StdEncoding.EncodeToString(img);
-	dataURL := fmt.Sprintf("data:%s;base64,%s", mediaType, imgToStr);
-	vid.ThumbnailURL = &dataURL;
-	err = cfg.db.UpdateVideo(vid);
-	if err != nil{
-		respondWithError(w, http.StatusInternalServerError, "unable to update video", err)
+	err = cfg.db.UpdateVideo(video)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't update video", err)
 		return
 	}
 
-	
-	respondWithJSON(w, http.StatusOK, vid);
+	respondWithJSON(w, http.StatusOK, video)
 }
