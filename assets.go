@@ -1,12 +1,15 @@
 package main
 
 import (
+	"encoding/json"
+	"bytes"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
 func (cfg apiConfig) ensureAssetsDir() error {
@@ -16,9 +19,20 @@ func (cfg apiConfig) ensureAssetsDir() error {
 	return nil
 }
 
-func getAssetPath(videoID uuid.UUID, mediaType string) string{
+func getAssetPath(mediaType string) string{
+	base := make([]byte, 32)
+	_, err := rand.Read(base)
+	if err != nil{
+		panic("failed to generate random bytes")
+	}
+	id := base64.RawURLEncoding.EncodeToString(base)
+
 	ext := mediaTypeToExt(mediaType)
-	return fmt.Sprintf("%s%s", videoID, ext)
+	return fmt.Sprintf("%s%s", id, ext)
+}
+
+func (cfg apiConfig) getObjectURL(key string) string {
+	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, key)
 }
 
 func (cfg apiConfig) getAssetDiskPath(assetPath string) string {
@@ -35,4 +49,54 @@ func mediaTypeToExt(mediaType string) string {
 		return ".bin"
 	}
 	return "." + parts[1]
+}
+
+func getVideoAspectRatio(filePath string) (string, error) {
+	cmdStruct := exec.Command("ffprobe", "-v", "error", "-print_format", "json", "-show_streams", filePath)
+	var buff []byte;
+	outBuff := bytes.NewBuffer(buff)
+	cmdStruct.Stdout = outBuff
+	err := cmdStruct.Run()
+	if err != nil{
+		return "unable to run cmd", err
+	}
+
+	type VideoInfo struct {
+		Streams [] struct {
+			Width 	int 	`json:"width"`
+			Height 	int 	`json:"height"`
+		}`json:"streams"`
+	}
+
+	videoInfo := VideoInfo{}
+	err = json.Unmarshal(outBuff.Bytes(), &videoInfo)
+	if err != nil{
+		return "unable to unmarshal", err
+	}
+
+	width := videoInfo.Streams[0].Width
+    height := videoInfo.Streams[0].Height
+    fmt.Printf("Width: %d, Height: %d\n", width, height)
+	fmt.Printf("16*height/9 = %d, 16*width/9 = %d\n", 16*height/9, 16*width/9)
+	if width == 16*height/9 {
+		return "16:9", nil
+	} else if height == 16*width/9 {
+		return "9:16", nil
+	}
+
+    return "other", nil
+}
+
+func processVideoForFastStart(filePath string) (string, error){
+	outputFilePath := filePath+".processing"
+	cmd := exec.Command("ffmpeg", "-i", filePath, "-c", "copy", "-movflags", "faststart", "-f", "mp4", outputFilePath)
+	
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	
+	err := cmd.Run()
+	if err != nil{
+		return "unable to run cmd", fmt.Errorf("ffmpeg failed: %s: %w", stderr.String(), err)
+	}
+	return outputFilePath, nil
 }
