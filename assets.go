@@ -127,7 +127,14 @@ func generatePresignedURL(s3Client *s3.Client, bucket, key string, expireTime ti
 }
 
 func (cfg *apiConfig) dbVideoToSignedVideo(video database.Video) (database.Video, error){
+	if video.VideoURL == nil {
+		return video, nil
+	}
+
 	splitString := strings.Split(*video.VideoURL, ",")
+	if len(splitString) < 2 {
+		return video, nil 
+	}
 	bucket := splitString[0]
 	key := splitString[1]
 	presignedURL, err := generatePresignedURL(cfg.s3Client, bucket, key, (15*time.Minute))
@@ -136,9 +143,6 @@ func (cfg *apiConfig) dbVideoToSignedVideo(video database.Video) (database.Video
 	}
 
 	video.VideoURL = &presignedURL
-	err = cfg.db.UpdateVideo(video)
-	if err!= nil{
-		return database.Video{}, err
-	}
+
 	return video, nil
 }

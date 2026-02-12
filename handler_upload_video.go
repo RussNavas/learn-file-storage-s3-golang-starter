@@ -129,7 +129,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusInternalServerError, "Error uploading file to S3", err)
 		return
 	}
-	//url := cfg.getObjectURL(key)
+
 	url := bucketKey
 	video.VideoURL = &url
 	err = cfg.db.UpdateVideo(video)
@@ -137,7 +137,11 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusInternalServerError, "Couldn't update video", err)
 		return
 	}
-
-	respondWithJSON(w, http.StatusOK, video)
+	preSignedVid, err := cfg.dbVideoToSignedVideo(video)
+	if err != nil{
+		respondWithError(w, http.StatusInternalServerError, "Error pre signing video", err)
+		return
+	}
+	respondWithJSON(w, http.StatusOK, preSignedVid)
 
 }
