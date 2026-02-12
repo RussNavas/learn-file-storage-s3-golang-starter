@@ -117,7 +117,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	defer processedFile.Close()
 
 	key := path.Join(aspectPrefix , getAssetPath(mediaType))
-
+	bucketKey := fmt.Sprintf("%s,%s", cfg.s3Bucket, key)
 	_, err = cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket: 	 aws.String(cfg.s3Bucket),
 		Key:		 aws.String(key),
@@ -129,7 +129,8 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusInternalServerError, "Error uploading file to S3", err)
 		return
 	}
-	url := cfg.getObjectURL(key)
+	//url := cfg.getObjectURL(key)
+	url := bucketKey
 	video.VideoURL = &url
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {

@@ -1,15 +1,21 @@
 package main
 
 import (
-	"encoding/json"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
 )
 
 func (cfg apiConfig) ensureAssetsDir() error {
@@ -99,4 +105,40 @@ func processVideoForFastStart(filePath string) (string, error){
 		return "unable to run cmd", fmt.Errorf("ffmpeg failed: %s: %w", stderr.String(), err)
 	}
 	return outputFilePath, nil
+}
+
+func generatePresignedURL(s3Client *s3.Client, bucket, key string, expireTime time.Duration) (string, error){
+	// 1. Use the SDK to create a s3.PresignClient
+	presignClient := s3.NewPresignClient(s3Client)
+
+	// 2. Use the client's .PresignGetObject() method
+	// We pass s3.WithPresignExpires(expireTime) as the functional option at the end.
+	req, err := presignClient.PresignGetObject(context.TODO(), &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(expireTime))
+
+	if err != nil {
+		return "", err
+	}
+
+	// 3. Return the .URL field of the v4.PresignedHTTPRequest
+	return req.URL, nil
+}
+
+func (cfg *apiConfig) dbVideoToSignedVideo(video database.Video) (database.Video, error){
+	splitString := strings.Split(*video.VideoURL, ",")
+	bucket := splitString[0]
+	key := splitString[1]
+	presignedURL, err := generatePresignedURL(cfg.s3Client, bucket, key, (15*time.Minute))
+	if err != nil{
+		return database.Video{}, err
+	}
+
+	video.VideoURL = &presignedURL
+	err = cfg.db.UpdateVideo(video)
+	if err!= nil{
+		return database.Video{}, err
+	}
+	return video, nil
 }
