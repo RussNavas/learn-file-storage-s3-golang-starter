@@ -117,7 +117,6 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	defer processedFile.Close()
 
 	key := path.Join(aspectPrefix , getAssetPath(mediaType))
-	bucketKey := fmt.Sprintf("%s,%s", cfg.s3Bucket, key)
 	_, err = cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket: 	 aws.String(cfg.s3Bucket),
 		Key:		 aws.String(key),
@@ -130,18 +129,14 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	url := bucketKey
-	video.VideoURL = &url
+	videoURL := fmt.Sprintf("%s/%s", cfg.s3CfDistribution, key)
+	video.VideoURL = &videoURL
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't update video", err)
 		return
 	}
-	preSignedVid, err := cfg.dbVideoToSignedVideo(video)
-	if err != nil{
-		respondWithError(w, http.StatusInternalServerError, "Error pre signing video", err)
-		return
-	}
-	respondWithJSON(w, http.StatusOK, preSignedVid)
+
+	respondWithJSON(w, http.StatusOK, video)
 
 }

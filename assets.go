@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -11,11 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
 )
 
 func (cfg apiConfig) ensureAssetsDir() error {
@@ -106,7 +100,7 @@ func processVideoForFastStart(filePath string) (string, error){
 	}
 	return outputFilePath, nil
 }
-
+/*
 func generatePresignedURL(s3Client *s3.Client, bucket, key string, expireTime time.Duration) (string, error){
 	// 1. Use the SDK to create a s3.PresignClient
 	presignClient := s3.NewPresignClient(s3Client)
@@ -146,3 +140,4 @@ func (cfg *apiConfig) dbVideoToSignedVideo(video database.Video) (database.Video
 
 	return video, nil
 }
+	*/
